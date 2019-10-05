@@ -2,6 +2,7 @@ import util from 'util';
 import redisClient from '../config/redis'
 import models from '../config/db';
 import { convertIntoBase64 } from '../utils/convertIntoBase64';
+import { customErrorThrow } from '../utils';
 
 const saveToRedis = util.promisify(redisClient.set);
 const getFromRedis = util.promisify(redisClient.get);
@@ -11,13 +12,18 @@ export async function saveLongUrl({
   counter,
 }){
   try{
+    const result = await longUrlExist(longUrl);
+    if (result) {
+      customErrorThrow(409, 'Long url already exist');
+    }
+
     const shortUrl = convertIntoBase64(counter);
-    await saveToRedis(shortUrl,longUrl);
     await models.sequelize.query(
       'INSERT INTO tinyUrl (short_url, long_url) VALUES (?, ?)',{
       replacements :[shortUrl, longUrl],
       type: models.sequelize.QueryTypes.INSERT,
     });
+    await saveToRedis(shortUrl,longUrl);
   }
   catch(err){
     throw err;
@@ -37,11 +43,29 @@ export async function getchLongUrl({
       replacements: [shortUrl],
       type: models.sequelize.QueryTypes.SELECT
     });
-    
+
     if(!longUrl.length){
       return null;
     }
     return longUrl[0];
+  }
+  catch(err){
+    throw err;
+  }
+}
+
+async function longUrlExist( longUrl ){
+  try{
+    const details = await models.sequelize.query(
+      'SELECT * FROM tinyUrl WHERE long_url = ?;',{
+      replacements: [longUrl],
+      type: models.sequelize.QueryTypes.SELECT
+    });
+    
+    if (!details.length){
+      return false;
+    }
+    return true;
   }
   catch(err){
     throw err;
