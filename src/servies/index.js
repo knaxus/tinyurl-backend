@@ -9,13 +9,14 @@ const getFromRedis = util.promisify(redisClient.get);
 
 export async function saveLongUrl({
   longUrl,
-  counter,
 }){
   try{
     const result = await longUrlExist(longUrl);
     if (result) {
       customErrorThrow(409, 'Long url already exist');
     }
+    const counter = await getFromRedis('counter');
+    await saveToRedis('counter', counter + 1);
 
     const shortUrl = convertIntoBase64(counter);
     await models.sequelize.query(
