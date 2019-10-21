@@ -4,8 +4,8 @@ import models from '../config/db';
 import { convertIntoBase64 } from '../utils/convertIntoBase64';
 import { customErrorThrow } from '../utils';
 
-const saveToRedis = util.promisify(redisClient.set);
-const getFromRedis = util.promisify(redisClient.get);
+const saveToRedis = util.promisify(redisClient.set).bind(redisClient);
+const getFromRedis = util.promisify(redisClient.get).bind(redisClient);
 
 export async function saveLongUrl({
   longUrl,
@@ -15,23 +15,25 @@ export async function saveLongUrl({
     if (result) {
       customErrorThrow(409, 'Long url already exist');
     }
-    const counter = await getFromRedis('counter');
-    await saveToRedis('counter', counter + 1);
+    const counter = await getFromRedis('counter');    
 
     const shortUrl = convertIntoBase64(counter);
     await models.sequelize.query(
-      'INSERT INTO tinyUrl (short_url, long_url) VALUES (?, ?)',{
+      'INSERT INTO tiny_url (short_url, long_url) VALUES (?, ?)',{
       replacements :[shortUrl, longUrl],
       type: models.sequelize.QueryTypes.INSERT,
     });
+
     await saveToRedis(shortUrl,longUrl);
+    await saveToRedis('counter', counter + 1);
+    return shortUrl;
   }
   catch(err){
     throw err;
   }
 }
 
-export async function getchLongUrl({
+export async function getLongUrl({
   shortUrl,
 }){
   try{
@@ -40,7 +42,7 @@ export async function getchLongUrl({
       return longUrl;
     }
     longUrl = await models.sequelize.query(
-      'SELECT long_url FROM tinyUrl WHERE short_url = ?;',{
+      'SELECT long_url FROM tiny_url WHERE short_url = ?;',{
       replacements: [shortUrl],
       type: models.sequelize.QueryTypes.SELECT
     });
@@ -48,6 +50,9 @@ export async function getchLongUrl({
     if(!longUrl.length){
       return null;
     }
+
+    await saveToRedis(shortUrl,longUrl[0]);
+
     return longUrl[0];
   }
   catch(err){
@@ -58,7 +63,7 @@ export async function getchLongUrl({
 async function longUrlExist( longUrl ){
   try{
     const details = await models.sequelize.query(
-      'SELECT * FROM tinyUrl WHERE long_url = ?;',{
+      'SELECT * FROM tiny_url WHERE long_url = ?;',{
       replacements: [longUrl],
       type: models.sequelize.QueryTypes.SELECT
     });

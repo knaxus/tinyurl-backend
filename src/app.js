@@ -3,6 +3,10 @@ import path from 'path';
 import logger from 'morgan';
 import bodyParser from 'body-parser';
 import routes from './routes';
+import redisClient from './config/redis'
+
+redisClient.set('counter', 1);
+
 
 const app = express();
 app.disable('x-powered-by');
